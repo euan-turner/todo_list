@@ -11,7 +11,9 @@ import {
     query,
     where,
     collection,
-    getDocs, setDoc,
+    getDocs,
+    doc,
+    setDoc,
     deleteDoc,
     updateDoc } from 'firebase/firestore';
 import { auth, db, storage } from './Firebase';
@@ -136,4 +138,117 @@ export default function AppContextProvider( { children }: Props): ReactElement {
             alert(err);
         }
     };
+    
+    const handleAuthChange = async (params: { cb?: VoidFunction; err?: VoidFunction }) => {
+        onAuthStateChanged(auth, (user) => {
+            if (user === null) {
+                setCurrentUser(null);
+                params.err && params.err();
+            } else {
+                setCurrentUser({
+                    displayName: user.displayName,
+                    userId: user.uid,
+                    avatar: user.photoURL,
+                });
+                params.cb && params.cb();
+            }
+        });
+    }
+    
+    const addTodoItem = async (value: string) => {
+        try {
+            //Document reference to be added
+            const docRef = doc(
+              db,
+              "todo",
+              uuidv4() // Firebase can generate unique id, if third parameter left empty
+            );
+            const userId = auth.currentUser;
+            if (userId !== null) {
+                await setDoc(docRef, {
+                    userId: userId.uid,
+                    value,
+                });
+                alert(`Item ${value}} added!`);
+            }
+        } catch (err) {
+            alert(err);
+        }
+    };
+    
+    const getTodoItems = async () => {
+        try {
+            if (auth.currentUser !== null) {
+                const userId = auth.currentUser.uid;
+                
+                //Query to get only the documents that matches the logged in user id
+                const q = query(collection(db, "todo"), where("userId", "==", userId));
+                const querySnapshot = await getDocs(q);
+                
+                //Reset the todo items value
+                setTodoItems([]);
+                
+                //Map through the query result and assign the value to the todoItems state
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    setTodoItems((prev) => [
+                      ...prev,
+                        {
+                            itemId: doc.id,
+                            value: data.value,
+                        },
+                    ]);
+                });
+            }
+        } catch (err) {
+            alert(err);
+        }
+    };
+    
+    const updateTodoItem = async (params: { newValue: string; id: string }) => {
+        try {
+            //Reference to the document to update
+            const docRef = doc(db, "todo", params.id);
+            //Update the value of the todo item
+            await updateDoc(docRef, {
+                value: params.newValue
+            });
+            
+            alert(`Item updated!`);
+        } catch (err) {
+            alert(err);
+        }
+    }
+    
+    const deleteTodoItem = async (id: string) => {
+        try {
+            //Reference to the document to delete
+            const docRef = doc(db, "todo", id);
+            await deleteDoc(docRef);
+            
+            alert(`item: ${id}} deleted!`);
+        } catch (err) {
+            alert(err);
+        }
+    };
+    
+    return (
+      <AppContext.Provider
+          value={{
+                  loading,
+                  currentUser,
+                  logInUser,
+                  registerUser,
+                  handleAuthChange,
+                  updateAvatar,
+                  todoItems,
+                  addTodoItem,
+                  getTodoItems,
+                  updateTodoItem,
+                  deleteTodoItem,
+                  signOutUser,
+              }}
+          > {children}
+      </AppContext.Provider>
+    )
 }
